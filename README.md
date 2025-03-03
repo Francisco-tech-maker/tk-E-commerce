@@ -49,3 +49,29 @@ func main() {
     }
 }
 ```
+
+#### How to create, query or update a product (in CMD)
+
+##### Create
+
+```cmd
+curl --header "Content-Type: application/json" --request POST --data @products\2.json http://localhost:8080/api/products
+```
+
+##### Query All
+
+```cmd
+curl  http://localhost:8080/api/products
+```
+
+##### Query One
+
+```cmd
+curl  http://localhost:8080/api/products/3
+```
+
+##### Update
+
+```cmd
+curl --header "Content-Type: application/json" --request PUT --data @products\4.json http://localhost:8080/api/products/4
+```

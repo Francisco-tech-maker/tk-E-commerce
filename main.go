@@ -50,6 +50,36 @@ func main() {
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/logout", logoutHandler)
 
+	// New API endpoint from the functions in userapi.go:
+	http.HandleFunc("/api/users", GetUsersHandler)
+
+	http.HandleFunc("/api/products", func(w http.ResponseWriter, r *http.Request) {
+		// Use different handler functions based on the request method.
+		switch r.Method {
+		case http.MethodGet:
+			getProductsHandler(w, r)
+		case http.MethodPost:
+			createProductHandler(w, r)
+		default:
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Endpoints with ID in URL for GET, PUT, DELETE.
+	http.HandleFunc("/api/products/", func(w http.ResponseWriter, r *http.Request) {
+		// Determine method.
+		switch r.Method {
+		case http.MethodGet:
+			getProductHandler(w, r)
+		case http.MethodPut:
+			updateProductHandler(w, r)
+		case http.MethodDelete:
+			deleteProductHandler(w, r)
+		default:
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	log.Println("Server starting on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
