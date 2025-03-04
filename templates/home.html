@@ -6,6 +6,15 @@
 <body>
 <h1>Welcome, {{.}}!</h1>
 <p>This is your online shopping mall.</p>
+<h2>Products</h2>
+<ul>
+    {{range .Products}}
+    <li>
+        <strong>{{.Name}}</strong>: {{.Description}} - ${{printf "%.2f" .Price}}
+    </li>
+    {{end}}
+</ul>
+<button onclick="location.href='/query'" type="button">Query Products</button>
 <a href="/logout">Logout</a>
 </body>
 </html>

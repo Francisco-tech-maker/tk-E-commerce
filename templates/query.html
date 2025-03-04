@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Product Query - Shopping Mall</title>
+</head>
+<body>
+<h1>Product List</h1>
+<ul>
+    {{range .}}
+    <li>
+        <strong>{{.Name}}</strong>: {{.Description}} - ${{printf "%.2f" .Price}}
+    </li>
+    {{end}}
+</ul>
+<a href="/">Back to Home</a>
+</body>
+</html>

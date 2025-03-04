@@ -24,6 +24,11 @@ type User struct {
 	Password string // stored as a bcrypt hash
 }
 
+type PageData struct {
+	Username string
+	Products []Product
+}
+
 func init() {
 	// Parse all templates from the "templates" directory.
 	tpl = template.Must(template.ParseGlob("templates/*.html"))
@@ -79,6 +84,8 @@ func main() {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		}
 	})
+
+	http.HandleFunc("/query", queryHandler)
 
 	log.Println("Server starting on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -197,4 +204,31 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, cookie)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+func getProducts() ([]Product, error) {
+	rows, err := db.Query("SELECT id, name, description, price FROM products")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var products []Product
+	for rows.Next() {
+		var p Product
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Price); err != nil {
+			return nil, err
+		}
+		products = append(products, p)
+	}
+	return products, nil
+}
+
+func queryHandler(w http.ResponseWriter, r *http.Request) {
+	products, err := getProducts()
+	if err != nil {
+		http.Error(w, "Error fetching products", http.StatusInternalServerError)
+		return
+	}
+	tpl.ExecuteTemplate(w, "query.html", products)
 }

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Login</title>
+    <title>Login - Shopping Mall</title>
 </head>
 <body>
 <h1>Login</h1>
@@ -12,6 +12,16 @@
     <input type="password" name="password" required><br><br>
     <input type="submit" value="Login">
 </form>
+<h2>Products</h2>
+<ul>
+    {{range .Products}}
+    <li>
+        <strong>{{.Name}}</strong>: {{.Description}} - ${{printf "%.2f" .Price}}
+    </li>
+    {{end}}
+</ul>
+
+<button onclick="location.href='/query'" type="button">Query Products</button>
 <p>Don't have an account? <a href="/signup">Sign up here</a></p>
 </body>
 </html>
