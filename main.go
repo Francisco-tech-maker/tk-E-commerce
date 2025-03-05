@@ -24,6 +24,11 @@ type User struct {
 	Password string // stored as a bcrypt hash
 }
 
+type HomePageData struct {
+	Username string
+	Products []Product
+}
+
 func init() {
 	// Parse all templates from the "templates" directory.
 	tpl = template.Must(template.ParseGlob("templates/*.html"))
@@ -80,6 +85,9 @@ func main() {
 		}
 	})
 
+	// Endpoint for product queries (for search form)
+	http.HandleFunc("/api/products/query", queryProductsHandler)
+
 	log.Println("Server starting on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -87,6 +95,7 @@ func main() {
 // homeHandler is a protected route. It checks for a "session" cookie.
 func homeHandler(w http.ResponseWriter, r *http.Request) {
 	// Get the session cookie.
+	// Assume the user is authenticated and a session cookie "session" contains their user ID.
 	cookie, err := r.Cookie("session")
 	if err != nil {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -99,8 +108,21 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+
+	// Query all products (or adjust if you want a default search term)
+	products, err := queryProducts("")
+	if err != nil {
+		http.Error(w, "Error fetching products", http.StatusInternalServerError)
+		return
+	}
+
+	data := HomePageData{
+		Username: username,
+		Products: products,
+	}
+
 	// Render home page with the username.
-	tpl.ExecuteTemplate(w, "home.html", username)
+	tpl.ExecuteTemplate(w, "home.html", data)
 }
 
 // signupHandler allows users to create an account.
@@ -151,10 +173,21 @@ func signupHandler(w http.ResponseWriter, r *http.Request) {
 // loginHandler verifies user credentials and sets a session cookie.
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		tpl.ExecuteTemplate(w, "login.html", nil)
+		// Optionally, fetch products to display on the login page.
+		products, err := queryProducts("")
+		if err != nil {
+			http.Error(w, "Error fetching products", http.StatusInternalServerError)
+			return
+		}
+		data := HomePageData{
+			Username: "", // No username for the login page.
+			Products: products,
+		}
+		tpl.ExecuteTemplate(w, "login.html", data)
 		return
 	}
 
+	// POST branch: process login credentials...
 	// POST: Process login.
 	username := r.FormValue("username")
 	password := r.FormValue("password")
@@ -197,4 +230,47 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, cookie)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+func queryProducts(q string) ([]Product, error) {
+	var rows *sql.Rows
+	var err error
+	if q == "" {
+		rows, err = db.Query("SELECT id, name, description, price FROM products")
+	} else {
+		q = "%" + q + "%"
+		rows, err = db.Query("SELECT id, name, description, price FROM products WHERE name LIKE ?", q)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var products []Product
+	for rows.Next() {
+		var p Product
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Price); err != nil {
+			return nil, err
+		}
+		products = append(products, p)
+	}
+	return products, nil
+}
+
+func queryProductsHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve the query parameter "q" from the URL.
+	q := r.URL.Query().Get("q")
+	products, err := queryProducts(q)
+	if err != nil {
+		http.Error(w, "Error fetching products", http.StatusInternalServerError)
+		return
+	}
+	// Render the same home template with the filtered products.
+	// For this example, we'll assume the user is already logged in and we have their username.
+	// In a real app, you might retrieve this from the session.
+	data := HomePageData{
+		Username: "CurrentUser", // Replace with actual username from session
+		Products: products,
+	}
+	tpl.ExecuteTemplate(w, "home.html", data)
 }

@@ -4,8 +4,28 @@
     <title>Home - Shopping Mall</title>
 </head>
 <body>
-<h1>Welcome, {{.}}!</h1>
+<h1>Welcome, {{.Username}}!</h1>
 <p>This is your online shopping mall.</p>
+
+<!-- Query Form -->
+<form action="/api/products/query" method="GET">
+    <input type="text" name="q" placeholder="Search products">
+    <input type="submit" value="Search">
+</form>
+
+<!-- List of Products -->
+<h2>Product List</h2>
+<ul>
+    {{range .Products}}
+    <li>
+        <strong>{{.Name}}</strong> - ${{printf "%.2f" .Price}}<br>
+        {{.Description}}
+    </li>
+    {{else}}
+    <li>No products available.</li>
+    {{end}}
+</ul>
+
 <a href="/logout">Logout</a>
 </body>
 </html>
