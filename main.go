@@ -272,38 +272,26 @@ func queryProducts(q string) ([]Product, error) {
 }
 
 func queryProductsHandler(w http.ResponseWriter, r *http.Request) {
-	// Retrieve the query parameter "q" from the URL.
+	// Retrieve the search term from the URL query parameters.
 	q := r.URL.Query().Get("q")
 	products, err := queryProducts(q)
 	if err != nil {
 		http.Error(w, "Error fetching products", http.StatusInternalServerError)
 		return
 	}
-	// Render the same home template with the filtered products.
-	// For this example, we'll assume the user is already logged in and we have their username.
-	// In a real app, you might retrieve this from the session.
 
-	// Retrieve the session cookie containing the user ID.
+	// Try to retrieve the session cookie.
 	sessionCookie, err := r.Cookie("session")
-	if err != nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
-	userID := sessionCookie.Value
-
-	// Query the database to get the username.
 	var username string
-	err = db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
 	if err != nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
-
-	// Query products using the search term (if empty, all products are returned).
-	products, err = queryProducts(q)
-	if err != nil {
-		http.Error(w, "Error fetching products", http.StatusInternalServerError)
-		return
+		// If not logged in, set a default username.
+		username = "Guest"
+	} else {
+		userID := sessionCookie.Value
+		err = db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
+		if err != nil {
+			username = "Guest"
+		}
 	}
 
 	data := HomePageData{
