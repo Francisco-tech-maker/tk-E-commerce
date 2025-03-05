@@ -1,10 +1,10 @@
-This is a simple Tiktok e-commerce platform.
+This is a simple TikTok e-commerce platform.
 
 Below are the functions:
 
 - Verification
 - Signup / login / collecting Users' data
-- Querying product infomation
+- Querying product information
 - Cart
 - Order
 - Statements
@@ -74,4 +74,10 @@ curl  http://localhost:8080/api/products/3
 
 ```cmd
 curl --header "Content-Type: application/json" --request PUT --data @products\4.json http://localhost:8080/api/products/4
+```
+
+##### Delete
+
+```cmd
+curl --request DELETE http://localhost:8080/api/products/4
 ```
