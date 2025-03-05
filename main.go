@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -27,6 +28,19 @@ type User struct {
 type HomePageData struct {
 	Username string
 	Products []Product
+}
+
+// CartItem represents an item in the cart.
+type CartItem struct {
+	ID        int `json:"id"`
+	ProductID int `json:"product_id"`
+	Quantity  int `json:"quantity"`
+}
+
+// AddCartItemRequest represents the JSON structure for adding a cart item.
+type AddCartItemRequest struct {
+	ProductID int `json:"product_id"`
+	Quantity  int `json:"quantity"`
 }
 
 func init() {
@@ -87,6 +101,14 @@ func main() {
 
 	// Endpoint for product queries (for search form)
 	http.HandleFunc("/api/products/query", queryProductsHandler)
+
+	// Cart endpoints:
+	http.HandleFunc("/api/cart/create", createCartHandler)
+	http.HandleFunc("/api/cart/clear", clearCartHandler)
+	http.HandleFunc("/api/cart", getCartHandler)
+
+	// Cart endpoint for adding an item.
+	http.HandleFunc("/api/cart/add", addToCartHandler)
 
 	log.Println("Server starting on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -303,4 +325,166 @@ func queryProductsHandler(w http.ResponseWriter, r *http.Request) {
 	if err := tpl.ExecuteTemplate(w, "home.html", data); err != nil {
 		http.Error(w, "Error rendering template", http.StatusInternalServerError)
 	}
+}
+
+// createCartHandler creates a cart for the logged-in user if one does not exist.
+func createCartHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve the session cookie (user ID)
+	sessionCookie, err := r.Cookie("session")
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	userID := sessionCookie.Value
+
+	// Check if a cart already exists for this user.
+	var cartID int
+	err = db.QueryRow("SELECT id FROM carts WHERE user_id = ?", userID).Scan(&cartID)
+	if err == sql.ErrNoRows {
+		// No cart exists; create one.
+		res, err := db.Exec("INSERT INTO carts (user_id) VALUES (?)", userID)
+		if err != nil {
+			http.Error(w, "Error creating cart", http.StatusInternalServerError)
+			return
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			http.Error(w, "Error retrieving cart ID", http.StatusInternalServerError)
+			return
+		}
+		cartID = int(id)
+	} else if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Optionally, return the cart info as JSON.
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"cart_id": %d}`, cartID)
+}
+
+// clearCartHandler deletes all items in the user's cart.
+func clearCartHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve the session cookie (user ID)
+	sessionCookie, err := r.Cookie("session")
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	userID := sessionCookie.Value
+
+	// Get the cart ID for the user.
+	var cartID int
+	err = db.QueryRow("SELECT id FROM carts WHERE user_id = ?", userID).Scan(&cartID)
+	if err != nil {
+		http.Error(w, "Cart not found", http.StatusNotFound)
+		return
+	}
+
+	// Delete all items in the cart.
+	_, err = db.Exec("DELETE FROM cart_items WHERE cart_id = ?", cartID)
+	if err != nil {
+		http.Error(w, "Error clearing cart", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// getCartHandler retrieves all items in the user's cart.
+func getCartHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve the session cookie (user ID)
+	sessionCookie, err := r.Cookie("session")
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	userID := sessionCookie.Value
+
+	// Get the cart ID for the user.
+	var cartID int
+	err = db.QueryRow("SELECT id FROM carts WHERE user_id = ?", userID).Scan(&cartID)
+	if err != nil {
+		http.Error(w, "Cart not found", http.StatusNotFound)
+		return
+	}
+
+	// Query all items in the cart.
+	rows, err := db.Query("SELECT id, product_id, quantity FROM cart_items WHERE cart_id = ?", cartID)
+	if err != nil {
+		http.Error(w, "Error fetching cart items", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var items []CartItem
+	for rows.Next() {
+		var item CartItem
+		if err := rows.Scan(&item.ID, &item.ProductID, &item.Quantity); err != nil {
+			http.Error(w, "Error scanning cart item", http.StatusInternalServerError)
+			return
+		}
+		items = append(items, item)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(items)
+}
+
+// addToCartHandler handles POST requests to /api/cart/add
+func addToCartHandler(w http.ResponseWriter, r *http.Request) {
+	// Only allow POST method.
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Retrieve the session cookie containing the user ID.
+	sessionCookie, err := r.Cookie("session")
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	userID := sessionCookie.Value
+
+	// Check if the user already has a cart. If not, create one.
+	var cartID int
+	err = db.QueryRow("SELECT id FROM carts WHERE user_id = ?", userID).Scan(&cartID)
+	if err == sql.ErrNoRows {
+		// Create a new cart for this user.
+		res, err := db.Exec("INSERT INTO carts (user_id) VALUES (?)", userID)
+		if err != nil {
+			http.Error(w, "Error creating cart", http.StatusInternalServerError)
+			return
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			http.Error(w, "Error retrieving cart ID", http.StatusInternalServerError)
+			return
+		}
+		cartID = int(id)
+	} else if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Decode the JSON request body into our AddCartItemRequest struct.
+	var reqData AddCartItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqData); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	// Insert the new cart item into the database.
+	query := "INSERT INTO cart_items (cart_id, product_id, quantity) VALUES (?, ?, ?)"
+	_, err = db.Exec(query, cartID, reqData.ProductID, reqData.Quantity)
+	if err != nil {
+		http.Error(w, "Error adding item to cart", http.StatusInternalServerError)
+		return
+	}
+
+	// Respond with a success message.
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Item added to cart successfully",
+	})
 }
