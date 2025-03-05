@@ -94,14 +94,15 @@ func main() {
 
 // homeHandler is a protected route. It checks for a "session" cookie.
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-	// Get the session cookie.
-	// Assume the user is authenticated and a session cookie "session" contains their user ID.
-	cookie, err := r.Cookie("session")
+	// Retrieve the session cookie containing the user ID.
+	sessionCookie, err := r.Cookie("session")
 	if err != nil {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	userID := cookie.Value
+	userID := sessionCookie.Value
+
+	// Query the database to get the username using the user ID.
 	var username string
 	err = db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
 	if err != nil {
@@ -109,7 +110,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query all products (or adjust if you want a default search term)
+	// Query all products (no search term).
 	products, err := queryProducts("")
 	if err != nil {
 		http.Error(w, "Error fetching products", http.StatusInternalServerError)
@@ -121,8 +122,10 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		Products: products,
 	}
 
-	// Render home page with the username.
-	tpl.ExecuteTemplate(w, "home.html", data)
+	// Render the home page template.
+	if err := tpl.ExecuteTemplate(w, "home.html", data); err != nil {
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+	}
 }
 
 // signupHandler allows users to create an account.
@@ -210,13 +213,24 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set session cookie.
-	cookie := &http.Cookie{
+	// Set a cookie with the username (and/or user ID if desired)
+	usernameCookie := &http.Cookie{
+		Name:  "username",
+		Value: username,
+		Path:  "/",
+		// Optional: set Secure, HttpOnly, etc.
+	}
+	http.SetCookie(w, usernameCookie)
+
+	// Also set a session cookie with user ID if needed
+	idCookie := &http.Cookie{
 		Name:  "session",
 		Value: strconv.Itoa(user.ID),
 		Path:  "/",
 	}
-	http.SetCookie(w, cookie)
+	http.SetCookie(w, idCookie)
+
+	// Redirect to the home page
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -268,9 +282,37 @@ func queryProductsHandler(w http.ResponseWriter, r *http.Request) {
 	// Render the same home template with the filtered products.
 	// For this example, we'll assume the user is already logged in and we have their username.
 	// In a real app, you might retrieve this from the session.
+
+	// Retrieve the session cookie containing the user ID.
+	sessionCookie, err := r.Cookie("session")
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	userID := sessionCookie.Value
+
+	// Query the database to get the username.
+	var username string
+	err = db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	// Query products using the search term (if empty, all products are returned).
+	products, err = queryProducts(q)
+	if err != nil {
+		http.Error(w, "Error fetching products", http.StatusInternalServerError)
+		return
+	}
+
 	data := HomePageData{
-		Username: "CurrentUser", // Replace with actual username from session
+		Username: username,
 		Products: products,
 	}
-	tpl.ExecuteTemplate(w, "home.html", data)
+
+	// Render the home page template with the filtered products.
+	if err := tpl.ExecuteTemplate(w, "home.html", data); err != nil {
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+	}
 }
